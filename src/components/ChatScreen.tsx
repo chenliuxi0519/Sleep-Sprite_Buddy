@@ -280,25 +280,18 @@ function pickBestVoice(): SpeechSynthesisVoice | null {
   }
 
   const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) {
-    return null;
-  }
+  if (!voices.length) return null;
 
-  // return (
-  //   voices.find((voice) => /en/i.test(voice.lang) && /female|samantha|zira|aria|ava|serena/i.test(voice.name)) ??
-  //   voices.find((voice) => /^en/i.test(voice.lang)) ??
-  //   voices[0] ??
-  //   null
-  // );
-  return (
-  voices.find(v => /Samantha/i.test(v.name)) ||                 // mac 最自然
-  voices.find(v => /Google UK English Female/i.test(v.name)) || // Chrome 可爱
-  voices.find(v => /Microsoft Zira/i.test(v.name)) ||           // Windows
-  voices.find(v => /female/i.test(v.name)) ||
-  voices.find(v => /^en/i.test(v.lang)) ||
-  voices[0] ||
-  null
-);
+  // ✅ 优先选系统默认（最稳定，安卓/苹果都能发声）
+  const defaultVoice = voices.find(v => v.default);
+  if (defaultVoice) return defaultVoice;
+
+  // ✅ 其次选 en（兼容性最好）
+  const enVoice = voices.find(v => /^en/i.test(v.lang));
+  if (enVoice) return enVoice;
+
+  // ✅ 最后随便一个（保证一定有声音）
+  return voices[0];
 }
 
 const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
@@ -442,42 +435,50 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
 //     });
 //   };
 
+
 const speakText = async (text: string) => {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     return;
   }
 
-  // ✅ 等 voice 加载完成（关键）
+  // ✅ 等 voices 加载（非常关键）
   await new Promise<void>((resolve) => {
     const voices = window.speechSynthesis.getVoices();
     if (voices.length) {
       resolve();
       return;
     }
-
     window.speechSynthesis.onvoiceschanged = () => resolve();
   });
 
-  await new Promise<void>((resolve) => {
-    window.speechSynthesis.cancel();
+  const speak = (useFallback = false) => {
+    const utterance = new SpeechSynthesisUtterance(text);
 
-    const cuteText = text
-      .replace(/\.$/, "~")
-      .replace(/!$/, "!!");
+    // 👉 第一次尝试用 voice
+    if (!useFallback) {
+      utterance.voice = pickBestVoice();
+    }
 
-    const utterance = new SpeechSynthesisUtterance(cuteText);
-    utterance.voice = pickBestVoice();
-
+    // ✅ 稍微调一下，但别太激进（保证稳定）
     utterance.rate = 0.92;
     utterance.pitch = 1.25;
     utterance.volume = 1;
 
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
+    utterance.onerror = () => {
+      // ❗关键：失败再用默认播一次
+      if (!useFallback) {
+        console.log("Retrying TTS without voice...");
+        speak(true);
+      }
+    };
 
-    speechUtteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  });
+  };
+
+  // ✅ 先 cancel 再播（防止卡住）
+  window.speechSynthesis.cancel();
+
+  speak(false);
 };
 
 
