@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover fills the full screen including notch/home bar areas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sleep Sprite Buddy</title>
+    <meta name="description" content="Your cozy sleep companion" />
+
+    <!-- PWA: removes browser chrome when added to home screen -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS standalone (removes Safari URL bar when launched from home screen) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sleep Sprite" />
+
+    <!-- Prevent text size adjust on orientation change -->
+    <meta name="format-detection" content="telephone=no" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
