@@ -227,7 +227,8 @@ function getStatusText(status: VoiceStatus) {
     case "error":
       return "Voice mode hit an error.";
     default:
-      return "Tap the mic once to start, tap again to stop.";
+      // return "Tap the mic once to start, tap again to stop.";
+      return "";
   }
 }
 
@@ -283,12 +284,21 @@ function pickBestVoice(): SpeechSynthesisVoice | null {
     return null;
   }
 
+  // return (
+  //   voices.find((voice) => /en/i.test(voice.lang) && /female|samantha|zira|aria|ava|serena/i.test(voice.name)) ??
+  //   voices.find((voice) => /^en/i.test(voice.lang)) ??
+  //   voices[0] ??
+  //   null
+  // );
   return (
-    voices.find((voice) => /en/i.test(voice.lang) && /female|samantha|zira|aria|ava|serena/i.test(voice.name)) ??
-    voices.find((voice) => /^en/i.test(voice.lang)) ??
-    voices[0] ??
-    null
-  );
+  voices.find(v => /Samantha/i.test(v.name)) ||                 // mac 最自然
+  voices.find(v => /Google UK English Female/i.test(v.name)) || // Chrome 可爱
+  voices.find(v => /Microsoft Zira/i.test(v.name)) ||           // Windows
+  voices.find(v => /female/i.test(v.name)) ||
+  voices.find(v => /^en/i.test(v.lang)) ||
+  voices[0] ||
+  null
+);
 }
 
 const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
@@ -350,14 +360,24 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
     return screenMode === "animation" ? videoPhase : getVoiceVideoPhase(voiceStatus);
   }, [screenMode, videoPhase, voiceStatus]);
 
+  // const currentVideoSrc =
+  //   currentPhase === "awake"
+  //     ? awakeVideo
+  //     : currentPhase === "talk"
+  //     ? talkVideo
+  //     : currentPhase === "answer"
+  //     ? answerVideo
+  //     : yawnVideo;
   const currentVideoSrc =
-    currentPhase === "awake"
-      ? awakeVideo
-      : currentPhase === "talk"
-      ? talkVideo
-      : currentPhase === "answer"
-      ? answerVideo
-      : yawnVideo;
+  screenMode === "voice"
+    ? talkVideo 
+    : currentPhase === "awake"
+    ? awakeVideo
+    : currentPhase === "talk"
+    ? talkVideo
+    : currentPhase === "answer"
+    ? answerVideo
+    : yawnVideo;
 
   const stopRecorderTracks = () => {
     if (streamRef.current) {
@@ -386,26 +406,80 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
     chunksRef.current = [];
   };
 
-  const speakText = async (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+//   const speakText = async (text: string) => {
+//     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+//       return;
+//     }
+
+//     await new Promise<void>((resolve) => {
+//       window.speechSynthesis.cancel();
+
+//       // const utterance = new SpeechSynthesisUtterance(text);
+//       // utterance.voice = pickBestVoice();
+//       // utterance.rate = 1;
+//       // utterance.pitch = 1.05;
+//       // utterance.volume = 1;
+
+//       // ✨ 可爱语气小处理（可选但很加分）
+// const cuteText = text
+//   .replace(/\.$/, "~")        // 句号变波浪
+//   .replace(/!$/, "!!");       // 感叹更活泼
+
+// const utterance = new SpeechSynthesisUtterance(cuteText);
+
+// utterance.voice = pickBestVoice();
+
+// // 🎯 核心参数（可爱关键）
+// utterance.rate = 0.92;   // 稍慢 → 更温柔
+// utterance.pitch = 1.25;  // 提高音高 → 可爱感
+// utterance.volume = 1;
+
+//       utterance.onend = () => resolve();
+//       utterance.onerror = () => resolve();
+
+//       speechUtteranceRef.current = utterance;
+//       window.speechSynthesis.speak(utterance);
+//     });
+//   };
+
+const speakText = async (text: string) => {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return;
+  }
+
+  // ✅ 等 voice 加载完成（关键）
+  await new Promise<void>((resolve) => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) {
+      resolve();
       return;
     }
 
-    await new Promise<void>((resolve) => {
-      window.speechSynthesis.cancel();
+    window.speechSynthesis.onvoiceschanged = () => resolve();
+  });
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.voice = pickBestVoice();
-      utterance.rate = 1;
-      utterance.pitch = 1.05;
-      utterance.volume = 1;
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+  await new Promise<void>((resolve) => {
+    window.speechSynthesis.cancel();
 
-      speechUtteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    });
-  };
+    const cuteText = text
+      .replace(/\.$/, "~")
+      .replace(/!$/, "!!");
+
+    const utterance = new SpeechSynthesisUtterance(cuteText);
+    utterance.voice = pickBestVoice();
+
+    utterance.rate = 0.92;
+    utterance.pitch = 1.25;
+    utterance.volume = 1;
+
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+
+    speechUtteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  });
+};
+
 
   const sendAudioToBackend = async (audioBlob: Blob) => {
     const audioBase64 = await blobToBase64(audioBlob);
@@ -648,8 +722,8 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
                 key={`${screenMode}-${currentPhase}`}
                 src={currentVideoSrc}
                 autoPlay
-                muted={screenMode === "voice"}
-                loop={screenMode === "voice" ? currentPhase !== "answer" : videoPhase === "yawn"}
+                muted={screenMode === "voice"} // ✅ voice 静音
+loop={screenMode === "voice" ? true : videoPhase === "yawn"} // ✅ voice 永远循环s
                 playsInline
                 onEnded={() => {
                   if (screenMode === "voice") return;
@@ -744,22 +818,22 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
                   bottom: "max(16px, env(safe-area-inset-bottom))",
                   zIndex: 15,
                   borderRadius: 24,
-                  padding: 16,
-                  background: "rgba(12,12,18,0.72)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(12px)",
-                  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-                  color: "white",
+                  padding: 5,
+                  // background: "rgba(12,12,18,0.72)",
+                  // border: "1px solid rgba(255,255,255,0.12)",
+                  // backdropFilter: "blur(12px)",
+                  // boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+                  // color: "white",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                   <div>
                     {/* <div style={{ fontSize: 15, fontWeight: 700 }}>Lulu Voice Mode</div> */}
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>{getStatusText(voiceStatus)}</div>
+                    <div style={{ fontSize: 12, opacity: 0.5, marginTop: 4 }}>{getStatusText(voiceStatus)}</div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button
+                  <div style={{ display: "flex", gap: 5 }}>
+                    {/* <button
                       onClick={() => void handleMicClick()}
                       disabled={voiceStatus === "processing"}
                       style={{
@@ -777,7 +851,40 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
                       aria-label={voiceStatus === "recording" ? "Stop talking" : "Start talking"}
                     >
                       {voiceStatus === "processing" ? <Loader2 size={20} className="animate-spin" /> : <Mic size={20} />}
-                    </button>
+                    </button> */}
+                    {screenMode === "voice" && (
+  <motion.button
+    onClick={() => void handleMicClick()}
+    initial={{ scale: 0.6, opacity: 0 }}
+    animate={{ scale: 1, opacity: 1 }}
+    exit={{ scale: 0.6, opacity: 0 }}
+    style={{
+      position: "absolute",
+      right: 20,
+      bottom: 20,
+      width: 64,
+      height: 64,
+      borderRadius: "50%",
+      background:
+        voiceStatus === "recording"
+          ? "rgba(255,80,80,0.35)"
+          : "rgba(255,255,255,0.15)",
+      border: "1px solid rgba(255,255,255,0.2)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backdropFilter: "blur(10px)",
+      cursor: "pointer",
+      zIndex: 20,
+    }}
+  >
+    {voiceStatus === "processing" ? (
+      <Loader2 size={26} className="animate-spin" />
+    ) : (
+      <Mic size={26} />
+    )}
+  </motion.button>
+)}
 
                     {/* <button
                       onClick={() => void handleToggleVoiceMode()}
@@ -800,30 +907,30 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                <div style={{ display: "grid", gap: 5, marginTop: 14 }}>
                   <div
-                    style={{
-                      borderRadius: 18,
-                      background: "rgba(255,255,255,0.06)",
-                      padding: "10px 12px",
-                      minHeight: 58,
-                    }}
+                    // style={{
+                    //   borderRadius: 18,
+                    //   background: "rgba(255,255,255,0.06)",
+                    //   padding: "10px 12px",
+                    //   minHeight: 58,
+                    // }}
                   >
                     {/* <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, opacity: 0.65 }}>
                       <Mic size={12} />
                       You
                     </div> */}
                     <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45, opacity: inputTranscript ? 0.96 : 0.55 }}>
-                      {inputTranscript || "Your speech transcription will appear here."}
+                      {inputTranscript || ""}
                     </div>
                   </div>
 
                   <div
                     style={{
-                      borderRadius: 18,
-                      background: "rgba(255,255,255,0.08)",
-                      padding: "10px 12px",
-                      minHeight: 58,
+                      // borderRadius: 18,
+                      // background: "rgba(255,255,255,0.08)",
+                      // padding: "10px 12px",
+                      // minHeight: 58,
                     }}
                   >
                     {/* <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, opacity: 0.65 }}>
@@ -831,7 +938,7 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
                       Lulu
                     </div> */}
                     <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.45, opacity: outputTranscript ? 0.96 : 0.55 }}>
-                      {outputTranscript || "Lulu's reply will appear here."}
+                      {outputTranscript}
                     </div>
                   </div>
                 </div>
