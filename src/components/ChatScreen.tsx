@@ -327,11 +327,16 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
     historyRef.current = [];
   }, [open]);
 
-  useEffect(() => {
-    if (!open) {
-      void cleanupVoiceResources();
-    }
-  }, [open]);
+useEffect(() => {
+  if (!open) return;
+
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    window.speechSynthesis.cancel();
+  }
+}, [open]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -436,49 +441,87 @@ const ChatScreen = ({ open, isLandscape, onClose }: ChatScreenProps) => {
 //   };
 
 
+// const speakText = async (text: string) => {
+//   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+//     return;
+//   }
+
+//   // ✅ 等 voices 加载（非常关键）
+//   await new Promise<void>((resolve) => {
+//     const voices = window.speechSynthesis.getVoices();
+//     if (voices.length) {
+//       resolve();
+//       return;
+//     }
+//     window.speechSynthesis.onvoiceschanged = () => resolve();
+//   });
+
+//   const speak = (useFallback = false) => {
+//     const utterance = new SpeechSynthesisUtterance(text);
+
+//     // 👉 第一次尝试用 voice
+//     if (!useFallback) {
+//       utterance.voice = pickBestVoice();
+//     }
+
+//     // ✅ 稍微调一下，但别太激进（保证稳定）
+//     utterance.rate = 0.92;
+//     utterance.pitch = 1.25;
+//     utterance.volume = 1;
+
+//     utterance.onerror = () => {
+//       // ❗关键：失败再用默认播一次
+//       if (!useFallback) {
+//         console.log("Retrying TTS without voice...");
+//         speak(true);
+//       }
+//     };
+
+//     window.speechSynthesis.speak(utterance);
+//   };
+
+//   // ✅ 先 cancel 再播（防止卡住）
+//   window.speechSynthesis.cancel();
+
+//   speak(false);
+// };
 const speakText = async (text: string) => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    return;
-  }
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-  // ✅ 等 voices 加载（非常关键）
-  await new Promise<void>((resolve) => {
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length) {
-      resolve();
-      return;
-    }
-    window.speechSynthesis.onvoiceschanged = () => resolve();
-  });
+  return new Promise<void>((resolve) => {
+    const speak = (useFallback = false) => {
+      const utterance = new SpeechSynthesisUtterance(text);
 
-  const speak = (useFallback = false) => {
-    const utterance = new SpeechSynthesisUtterance(text);
+      // 🌟 iOS 必须
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
 
-    // 👉 第一次尝试用 voice
-    if (!useFallback) {
-      utterance.voice = pickBestVoice();
-    }
-
-    // ✅ 稍微调一下，但别太激进（保证稳定）
-    utterance.rate = 0.92;
-    utterance.pitch = 1.25;
-    utterance.volume = 1;
-
-    utterance.onerror = () => {
-      // ❗关键：失败再用默认播一次
       if (!useFallback) {
-        console.log("Retrying TTS without voice...");
-        speak(true);
+        const voice = pickBestVoice();
+        if (voice) utterance.voice = voice;
       }
+
+      utterance.rate = 0.95;
+      utterance.pitch = 1.2;
+      utterance.volume = 1;
+
+      utterance.lang = "en-US"; // ✅ 强烈建议（iOS稳定很多）
+
+      utterance.onend = () => resolve();
+      utterance.onerror = () => {
+        if (!useFallback) {
+          speak(true);
+        } else {
+          resolve();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
     };
 
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // ✅ 先 cancel 再播（防止卡住）
-  window.speechSynthesis.cancel();
-
-  speak(false);
+    // ⚠️ iOS hack：延迟一帧更稳定
+    setTimeout(() => speak(false), 50);
+  });
 };
 
 
@@ -647,18 +690,33 @@ const speakText = async (text: string) => {
     setError("");
   };
 
+  // const handleMicClick = async () => {
+  //   if (voiceStatus === "processing") {
+  //     return;
+  //   }
+
+  //   if (voiceStatus === "recording") {
+  //     stopRecording();
+  //     return;
+  //   }
+
+  //   await startRecording();
+  // };
+
   const handleMicClick = async () => {
-    if (voiceStatus === "processing") {
-      return;
-    }
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.resume(); // 🔥 解锁 iOS audio
+  }
 
-    if (voiceStatus === "recording") {
-      stopRecording();
-      return;
-    }
+  if (voiceStatus === "processing") return;
 
-    await startRecording();
-  };
+  if (voiceStatus === "recording") {
+    stopRecording();
+    return;
+  }
+
+  await startRecording();
+};
 
   const handleClose = async () => {
     await cleanupVoiceResources();
